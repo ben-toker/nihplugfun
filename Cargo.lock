@@ -332,7 +332,7 @@ dependencies = [
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#400eb3156f221073fbcaf95607b56842272d134b"
+source = "git+https://github.com/robbert-vdh/nih-plug.git#400eb3156f221073fbcaf95607b56842272d134b"
 dependencies = [
  "anyhow",
  "anymap3",
@@ -362,7 +362,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#400eb3156f221073fbcaf95607b56842272d134b"
+source = "git+https://github.com/robbert-vdh/nih-plug.git#400eb3156f221073fbcaf95607b56842272d134b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -372,7 +372,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_xtask"
 version = "0.1.0"
-source = "git+https://github.com/robbert-vdh/nih-plug#400eb3156f221073fbcaf95607b56842272d134b"
+source = "git+https://github.com/robbert-vdh/nih-plug.git#400eb3156f221073fbcaf95607b56842272d134b"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -380,15 +380,6 @@ dependencies = [
  "reflink",
  "serde",
  "toml",
-]
-
-[[package]]
-name = "nihplugfun"
-version = "0.1.0"
-dependencies = [
- "nih_plug",
- "nih_plug_xtask",
- "realfft",
 ]
 
 [[package]]
@@ -660,6 +651,14 @@ name = "smallvec"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
+
+[[package]]
+name = "stftlowpass"
+version = "0.1.0"
+dependencies = [
+ "nih_plug",
+ "realfft",
+]
 
 [[package]]
 name = "strength_reduce"
