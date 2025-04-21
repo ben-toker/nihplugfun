@@ -15,7 +15,7 @@ const FFT_WINDOW_SIZE: usize = WINDOW_SIZE + FILTER_WINDOW_SIZE - 1;
 /// The gain compensation we need to apply for the STFT process.
 const GAIN_COMPENSATION: f32 = 1.0 / FFT_WINDOW_SIZE as f32;
 
-struct Stft {
+struct Nihplugfun{
     params: Arc<StftParams>,
 
     /// An adapter that performs most of the overlap-add algorithm for us.
@@ -35,7 +35,7 @@ struct Stft {
 #[derive(Params)]
 struct StftParams {}
 
-impl Default for Stft {
+impl Default for Nihplugfun {
     fn default() -> Self {
         let mut planner = RealFftPlanner::new();
         let r2c_plan = planner.plan_fft_forward(FFT_WINDOW_SIZE);
@@ -82,9 +82,9 @@ impl Default for StftParams {
     }
 }
 
-impl Plugin for Stft {
-    const NAME: &'static str = "STFT Example";
-    const VENDOR: &'static str = "Moist Plugins GmbH";
+impl Plugin for Nihplugfun {
+    const NAME: &'static str = "STFT lowpass";
+    const VENDOR: &'static str = "ben toker";
     const URL: &'static str = "https://youtu.be/dQw4w9WgXcQ";
     const EMAIL: &'static str = "info@example.com";
 
@@ -163,7 +163,7 @@ impl Plugin for Stft {
     }
 }
 
-impl ClapPlugin for Stft {
+impl ClapPlugin for Nihplugfun {
     const CLAP_ID: &'static str = "com.moist-plugins-gmbh.stft";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("An example plugin using the STFT helper");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
@@ -175,7 +175,7 @@ impl ClapPlugin for Stft {
     ];
 }
 
-impl Vst3Plugin for Stft {
+impl Vst3Plugin for Nihplugfun {
     const VST3_CLASS_ID: [u8; 16] = *b"StftMoistestPlug";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Fx,
@@ -184,5 +184,4 @@ impl Vst3Plugin for Stft {
     ];
 }
 
-nih_export_clap!(Stft);
-nih_export_vst3!(Stft);
+nih_export_vst3!(Nihplugfun);

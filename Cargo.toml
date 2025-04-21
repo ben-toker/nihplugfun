@@ -14,4 +14,7 @@ realfft = "3.4.0"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug" }
 nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 
+[package.metadata.nih-plug]
+vst3 = true
+
 
