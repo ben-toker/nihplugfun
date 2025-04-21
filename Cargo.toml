@@ -1,0 +1,17 @@
+[package]
+name = "nihplugfun"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[workspace]
+members = ["xtask"]
+
+[dependencies]
+realfft = "3.4.0"
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug" }
+nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+
+
