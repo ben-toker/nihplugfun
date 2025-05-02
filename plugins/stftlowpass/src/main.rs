@@ -1,3 +1,8 @@
+use nih_plug::prelude::*;
+
+use stftlowpass::Freeze;
+
+
 fn main() {
-    println!("Hello, world!");
+    nih_export_standalone::<Freeze>();
 }

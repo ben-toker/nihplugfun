@@ -15,14 +15,11 @@ const FFT_WINDOW_SIZE: usize = WINDOW_SIZE + FILTER_WINDOW_SIZE - 1;
 /// The gain compensation we need to apply for the STFT process.
 const GAIN_COMPENSATION: f32 = 1.0 / FFT_WINDOW_SIZE as f32;
 
-struct Nihplugfun{
+pub struct Freeze {
     params: Arc<StftParams>,
 
     /// An adapter that performs most of the overlap-add algorithm for us.
     stft: util::StftHelper,
-
-    /// The FFT of a simple low-pass FIR filter.
-    lp_filter_spectrum: Vec<Complex32>,
 
     /// The algorithm for the FFT operation.
     r2c_plan: Arc<dyn RealToComplex<f32>>,
@@ -30,12 +27,16 @@ struct Nihplugfun{
     c2r_plan: Arc<dyn ComplexToReal<f32>>,
     /// The output of our real->complex FFT.
     complex_fft_buffer: Vec<Complex32>,
+
+     //This will track the frame we freeze on.
+    is_frozen: Arc<BoolParam>,
+    frozen_spectrum: Vec<Complex32>,
 }
 
 #[derive(Params)]
 struct StftParams {}
 
-impl Default for Nihplugfun {
+impl Default for Freeze {
     fn default() -> Self {
         let mut planner = RealFftPlanner::new();
         let r2c_plan = planner.plan_fft_forward(FFT_WINDOW_SIZE);
@@ -43,20 +44,6 @@ impl Default for Nihplugfun {
         let mut real_fft_buffer = r2c_plan.make_input_vec();
         let mut complex_fft_buffer = r2c_plan.make_output_vec();
 
-        // Build a super simple low-pass filter from one of the built in window functions
-        let mut filter_window = util::window::hann(FILTER_WINDOW_SIZE);
-        // And make sure to normalize this so convolution sums to 1
-        let filter_normalization_factor = filter_window.iter().sum::<f32>().recip();
-        for sample in &mut filter_window {
-            *sample *= filter_normalization_factor;
-        }
-        real_fft_buffer[0..FILTER_WINDOW_SIZE].copy_from_slice(&filter_window);
-
-        // RustFFT doesn't actually need a scratch buffer here, so we'll pass an empty buffer
-        // instead
-        r2c_plan
-            .process_with_scratch(&mut real_fft_buffer, &mut complex_fft_buffer, &mut [])
-            .unwrap();
 
         Self {
             params: Arc::new(StftParams::default()),
@@ -65,9 +52,9 @@ impl Default for Nihplugfun {
             // larger to account for time domain aliasing so we'll need to add some padding ot each
             // block.
             stft: util::StftHelper::new(2, WINDOW_SIZE, FFT_WINDOW_SIZE - WINDOW_SIZE),
-
-            lp_filter_spectrum: complex_fft_buffer.clone(),
-
+            
+            is_frozen: Arc::new(BoolParam::new("isfrozen",false)),
+            frozen_spectrum: vec![Complex32::new(0.0,0.0); complex_fft_buffer.len()],
             r2c_plan,
             c2r_plan,
             complex_fft_buffer,
@@ -82,11 +69,11 @@ impl Default for StftParams {
     }
 }
 
-impl Plugin for Nihplugfun {
-    const NAME: &'static str = "STFT lowpass";
+impl Plugin for Freeze {
+    const NAME: &'static str = "spectral freeze!?";
     const VENDOR: &'static str = "ben toker";
     const URL: &'static str = "https://youtu.be/dQw4w9WgXcQ";
-    const EMAIL: &'static str = "info@example.com";
+    const EMAIL: &'static str = "btoker@oberlin.edu";
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -134,7 +121,10 @@ impl Plugin for Nihplugfun {
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         self.stft
-            .process_overlap_add(buffer, 1, |_channel_idx, real_fft_buffer| {
+            .process_overlap_add(buffer, 1, |_channel_idx, real_fft_buffer| { 
+                // ADD PROCESSING
+                // HERE
+
                 // Forward FFT, `real_fft_buffer` already is already padded with zeroes, and the
                 // padding from the last iteration will have already been added back to the start of
                 // the buffer
@@ -142,30 +132,26 @@ impl Plugin for Nihplugfun {
                     .process_with_scratch(real_fft_buffer, &mut self.complex_fft_buffer, &mut [])
                     .unwrap();
 
-                // As per the convolution theorem we can simply multiply these two buffers. We'll
-                // also apply the gain compensation at this point.
-                for (fft_bin, kernel_bin) in self
-                    .complex_fft_buffer
-                    .iter_mut()
-                    .zip(&self.lp_filter_spectrum)
-                {
-                    *fft_bin *= *kernel_bin * GAIN_COMPENSATION;
-                }
-
+                
                 // Inverse FFT back into the scratch buffer. This will be added to a ring buffer
                 // which gets written back to the host at a one block delay.
                 self.c2r_plan
                     .process_with_scratch(&mut self.complex_fft_buffer, real_fft_buffer, &mut [])
                     .unwrap();
-            });
+
+                if self.is_frozen.value() {
+                    self.frozen_spectrum = self.complex_fft_buffer.clone();
+                }
+            })
+        ;
 
         ProcessStatus::Normal
     }
 }
 
 
-impl Vst3Plugin for Nihplugfun {
-    const VST3_CLASS_ID: [u8; 16] = *b"StftMoistestPlug";
+impl Vst3Plugin for Freeze {
+    const VST3_CLASS_ID: [u8; 16] = *b"tokerplugZZZZZZZ";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Fx,
         Vst3SubCategory::Tools,
@@ -173,4 +159,4 @@ impl Vst3Plugin for Nihplugfun {
     ];
 }
 
-nih_export_vst3!(Nihplugfun);
+//nih_export_vst3!(Freeze);
