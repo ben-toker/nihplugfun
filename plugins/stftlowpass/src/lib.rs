@@ -15,6 +15,14 @@ const FFT_WINDOW_SIZE: usize = WINDOW_SIZE + FILTER_WINDOW_SIZE - 1;
 /// The gain compensation we need to apply for the STFT process.
 const GAIN_COMPENSATION: f32 = 1.0 / FFT_WINDOW_SIZE as f32;
 
+#[derive(Clone,PartialEq,Eq)]
+pub enum FreezeState {
+    WantUnfreeze,
+    Unfrozen,
+    WantFreeze,
+    Frozen
+}
+
 pub struct Freeze {
     params: Arc<StftParams>,
 
@@ -28,13 +36,17 @@ pub struct Freeze {
     /// The output of our real->complex FFT.
     complex_fft_buffer: Vec<Complex32>,
 
+    /// The FFT of a simple low-pass FIR filter.
+    lp_filter_spectrum: Vec<Complex32>,
+
      //This will track the frame we freeze on.
-    is_frozen: Arc<BoolParam>,
+    freezestate: Arc<FreezeState>,
     frozen_spectrum: Vec<Complex32>,
 }
 
 #[derive(Params)]
 struct StftParams {}
+
 
 impl Default for Freeze {
     fn default() -> Self {
@@ -43,7 +55,16 @@ impl Default for Freeze {
         let c2r_plan = planner.plan_fft_inverse(FFT_WINDOW_SIZE);
         let mut real_fft_buffer = r2c_plan.make_input_vec();
         let mut complex_fft_buffer = r2c_plan.make_output_vec();
+        let mut frozen_spectrum = complex_fft_buffer.clone();
+        let mut freezestate = Arc::new(FreezeState::Unfrozen);
+    
 
+
+        // RustFFT doesn't actually need a scratch buffer here, so we'll pass an empty buffer
+        // instead
+        r2c_plan
+            .process_with_scratch(&mut real_fft_buffer, &mut complex_fft_buffer, &mut [])
+            .unwrap();
 
         Self {
             params: Arc::new(StftParams::default()),
@@ -53,8 +74,9 @@ impl Default for Freeze {
             // block.
             stft: util::StftHelper::new(2, WINDOW_SIZE, FFT_WINDOW_SIZE - WINDOW_SIZE),
             
-            is_frozen: Arc::new(BoolParam::new("isfrozen",false)),
+            freezestate,
             frozen_spectrum: vec![Complex32::new(0.0,0.0); complex_fft_buffer.len()],
+            lp_filter_spectrum: complex_fft_buffer.clone(),
             r2c_plan,
             c2r_plan,
             complex_fft_buffer,
@@ -102,7 +124,7 @@ impl Plugin for Freeze {
         // The plugin's latency consists of the block size from the overlap-add procedure and half
         // of the filter kernel's size (since we're using a linear phase/symmetrical convolution
         // kernel)
-        context.set_latency_samples(self.stft.latency_samples() + (FILTER_WINDOW_SIZE as u32 / 2));
+        context.set_latency_samples(self.stft.latency_samples());
 
         true
     }
@@ -114,36 +136,64 @@ impl Plugin for Freeze {
         self.stft.set_block_size(WINDOW_SIZE);
     }
 
+
+
     fn process(
         &mut self,
         buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+
         self.stft
             .process_overlap_add(buffer, 1, |_channel_idx, real_fft_buffer| { 
-                // ADD PROCESSING
-                // HERE
-
-                // Forward FFT, `real_fft_buffer` already is already padded with zeroes, and the
-                // padding from the last iteration will have already been added back to the start of
-                // the buffer
-                self.r2c_plan
-                    .process_with_scratch(real_fft_buffer, &mut self.complex_fft_buffer, &mut [])
-                    .unwrap();
-
                 
-                // Inverse FFT back into the scratch buffer. This will be added to a ring buffer
-                // which gets written back to the host at a one block delay.
-                self.c2r_plan
-                    .process_with_scratch(&mut self.complex_fft_buffer, real_fft_buffer, &mut [])
-                    .unwrap();
+                                
+                match *self.freezestate {
+                    FreezeState::Unfrozen => {
+                        // Forward FFT, `real_fft_buffer` already is already padded with zeroes, and the
+                        // padding from the last iteration will have already been added back to the start of
+                        // the buffer
+                        self.r2c_plan
+                            .process_with_scratch(real_fft_buffer, &mut self.complex_fft_buffer, &mut [])
+                            .unwrap();
+                            
+                                                
+                        for bin in self.complex_fft_buffer.iter_mut() {
+                            *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
+                        }
+                                 
+                        // Inverse FFT back into the scratch buffer. This will be added to a ring buffer
+                        // which gets written back to the host at a one block delay.
+                        self.c2r_plan
+                            .process_with_scratch(&mut self.complex_fft_buffer, real_fft_buffer, &mut [])
+                            .unwrap();
 
-                if self.is_frozen.value() {
-                    self.frozen_spectrum = self.complex_fft_buffer.clone();
+                     },
+                    FreezeState::WantFreeze => {
+                        self.frozen_spectrum = self.complex_fft_buffer.clone();
+                         
+                        for bin in self.complex_fft_buffer.iter_mut() {
+                            *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
+                        }
+
+                    },
+                    FreezeState::Frozen => {
+                        self.c2r_plan
+                            .process_with_scratch(&mut self.frozen_spectrum, real_fft_buffer, &mut [])
+                            .unwrap();
+                    }
+                    FreezeState::WantUnfreeze=>{
+
+                    },
                 }
-            })
-        ;
+                    
+                if *self.freezestate == FreezeState::WantFreeze {
+                    self.freezestate = FreezeState::Frozen.into()
+                }
+
+
+            });
 
         ProcessStatus::Normal
     }
@@ -159,4 +209,4 @@ impl Vst3Plugin for Freeze {
     ];
 }
 
-//nih_export_vst3!(Freeze);
+nih_export_vst3!(Freeze);

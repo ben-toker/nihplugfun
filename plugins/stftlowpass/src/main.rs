@@ -4,5 +4,5 @@ use stftlowpass::Freeze;
 
 
 fn main() {
-    nih_export_standalone::<Freeze>();
+ //   println!("{}", nih_export_standalone::<Freeze>());
 }
