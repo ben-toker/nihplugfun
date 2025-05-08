@@ -1,13 +1,14 @@
 use nih_plug::prelude::*;
 use realfft::num_complex::Complex32;
+use realfft::num_traits::real::Real;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use std::f32;
 use std::sync::Arc;
 
 /// The size of the windows we'll process at a time.
-const WINDOW_SIZE: usize = 64;
+const WINDOW_SIZE: usize = 1024;
 /// The length of the filter's impulse response.
-const FILTER_WINDOW_SIZE: usize = 33;
+const FILTER_WINDOW_SIZE: usize = (WINDOW_SIZE / 2) + 1;
 /// The length of the FFT window we will use to perform FFT convolution. This includes padding to
 /// prevent time domain aliasing as a result of cyclic convolution.
 const FFT_WINDOW_SIZE: usize = WINDOW_SIZE + FILTER_WINDOW_SIZE - 1;
@@ -36,9 +37,6 @@ pub struct Freeze {
     /// The output of our real->complex FFT.
     complex_fft_buffer: Vec<Complex32>,
 
-    /// The FFT of a simple low-pass FIR filter.
-    lp_filter_spectrum: Vec<Complex32>,
-
      //This will track the frame we freeze on.
     freezestate: Arc<FreezeState>,
     frozen_spectrum: Vec<Complex32>,
@@ -56,7 +54,7 @@ impl Default for Freeze {
         let mut real_fft_buffer = r2c_plan.make_input_vec();
         let mut complex_fft_buffer = r2c_plan.make_output_vec();
         let mut frozen_spectrum = complex_fft_buffer.clone();
-        let mut freezestate = Arc::new(FreezeState::Unfrozen);
+        let mut freezestate = Arc::new(FreezeState::WantFreeze);
     
 
 
@@ -75,8 +73,7 @@ impl Default for Freeze {
             stft: util::StftHelper::new(2, WINDOW_SIZE, FFT_WINDOW_SIZE - WINDOW_SIZE),
             
             freezestate,
-            frozen_spectrum: vec![Complex32::new(0.0,0.0); complex_fft_buffer.len()],
-            lp_filter_spectrum: complex_fft_buffer.clone(),
+            frozen_spectrum,
             r2c_plan,
             c2r_plan,
             complex_fft_buffer,
@@ -147,10 +144,11 @@ impl Plugin for Freeze {
 
         self.stft
             .process_overlap_add(buffer, 1, |_channel_idx, real_fft_buffer| { 
-                
-                                
+                   
                 match *self.freezestate {
                     FreezeState::Unfrozen => {
+
+
                         // Forward FFT, `real_fft_buffer` already is already padded with zeroes, and the
                         // padding from the last iteration will have already been added back to the start of
                         // the buffer
@@ -163,6 +161,8 @@ impl Plugin for Freeze {
                             *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
                         }
                                  
+                                
+                       
                         // Inverse FFT back into the scratch buffer. This will be added to a ring buffer
                         // which gets written back to the host at a one block delay.
                         self.c2r_plan
@@ -171,25 +171,31 @@ impl Plugin for Freeze {
 
                      },
                     FreezeState::WantFreeze => {
-                        self.frozen_spectrum = self.complex_fft_buffer.clone();
-                         
-                        for bin in self.complex_fft_buffer.iter_mut() {
-                            *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
-                        }
+                        println!("We're freezing!");
+
+                         self.r2c_plan
+                            .process_with_scratch(real_fft_buffer, &mut self.frozen_spectrum, &mut [])
+                            .unwrap();
+
+                        self.freezestate = FreezeState::Frozen.into()
 
                     },
                     FreezeState::Frozen => {
+
+                        self.complex_fft_buffer.clone_from_slice(&self.frozen_spectrum);
+
+                        for bin in self.complex_fft_buffer.iter_mut() {
+                                *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
+                        }
+                        
                         self.c2r_plan
-                            .process_with_scratch(&mut self.frozen_spectrum, real_fft_buffer, &mut [])
+                            .process_with_scratch(&mut self.complex_fft_buffer, real_fft_buffer, &mut [])
                             .unwrap();
+
                     }
                     FreezeState::WantUnfreeze=>{
 
                     },
-                }
-                    
-                if *self.freezestate == FreezeState::WantFreeze {
-                    self.freezestate = FreezeState::Frozen.into()
                 }
 
 
