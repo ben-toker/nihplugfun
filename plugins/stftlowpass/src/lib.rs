@@ -131,6 +131,7 @@ impl Plugin for Freeze {
         // only do stereo so that's not necessary. Setting the block size also zeroes out the
         // buffers.
         self.stft.set_block_size(WINDOW_SIZE);
+        self.freezestate = FreezeState::WantFreeze.into();
     }
 
 
@@ -161,7 +162,6 @@ impl Plugin for Freeze {
                             *bin *= GAIN_COMPENSATION;      // GAIN_COMPENSATION = 1.0 / FFT_WINDOW_SIZE as f32
                         }
                                  
-                                
                        
                         // Inverse FFT back into the scratch buffer. This will be added to a ring buffer
                         // which gets written back to the host at a one block delay.
@@ -171,8 +171,6 @@ impl Plugin for Freeze {
 
                      },
                     FreezeState::WantFreeze => {
-                        println!("We're freezing!");
-
                          self.r2c_plan
                             .process_with_scratch(real_fft_buffer, &mut self.frozen_spectrum, &mut [])
                             .unwrap();
