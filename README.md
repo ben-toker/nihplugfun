@@ -4,7 +4,7 @@ build out a "spectral freeze," where we take a spectral frame (fast Fourier tran
 back to real) to the output repeatedly (until we want it to stop). 
 
 This is built off of [NIH-Plug](https://github.com/robbert-vdh/nih-plug?tab=readme-ov-file)
-because I Rust > C++ (JUCE) and want to program in this language as much as possible.
+because I love Rust and want to program in this language as much as possible. That, and it was a better alternative to learning C++ (JUCE)
 
 ## Installation and building
 To get this running, clone the repo and run 
