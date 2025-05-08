@@ -1,6 +1,6 @@
 use nih_plug::prelude::*;
 
-use stftlowpass::Freeze;
+use spectralfreeze::Freeze;
 
 
 fn main() {
